@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Live HRV — Web Bluetooth + WASM</title>
+<style>
+  .viz-root {
+    /* light (reference palette) */
+    --page:#f9f9f7; --surface:#fcfcfb; --ink:#0b0b0b; --ink2:#52514e; --muted:#898781;
+    --grid:#e1e0d9; --baseline:#c3c2b7; --border:rgba(11,11,11,0.10);
+    --series:#2a78d6; --series2:#1baf7a; --good:#0ca30c; --critical:#d03b3b;
+    color-scheme: light dark;
+  }
+  @media (prefers-color-scheme: dark) {
+    .viz-root {
+      --page:#0d0d0d; --surface:#1a1a19; --ink:#ffffff; --ink2:#c3c2b7; --muted:#898781;
+      --grid:#2c2c2a; --baseline:#383835; --border:rgba(255,255,255,0.10);
+      --series:#3987e5; --series2:#199e70;
+    }
+  }
+  * { box-sizing: border-box; }
+  html,body { margin:0; }
+  body.viz-root {
+    background:var(--page); color:var(--ink);
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    line-height:1.4; padding: clamp(16px,4vw,40px);
+  }
+  header h1 { font-size:1.35rem; font-weight:650; margin:0 0 2px; }
+  header p  { margin:0; color:var(--ink2); font-size:.9rem; }
+  .controls { display:flex; flex-wrap:wrap; gap:10px; align-items:center; margin:18px 0 6px; }
+  button {
+    font:inherit; font-weight:550; color:var(--ink); background:var(--surface);
+    border:1px solid var(--border); border-radius:10px; padding:9px 15px; cursor:pointer;
+  }
+  button.primary { background:var(--series); color:#fff; border-color:transparent; }
+  button:disabled { opacity:.45; cursor:not-allowed; }
+  .status { color:var(--ink2); font-size:.85rem; min-height:1.2em; margin:2px 0 18px; }
+  .status b { color:var(--ink); font-weight:600; }
+  main { display:grid; gap:14px; grid-template-columns: repeat(auto-fit, minmax(230px,1fr)); }
+  .card { background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:16px 18px; }
+  .card .k { color:var(--ink2); font-size:.8rem; text-transform:none; }
+  .card .v { font-weight:650; font-variant-numeric: tabular-nums; }
+  .hero { grid-column: 1 / -1; display:flex; align-items:baseline; flex-wrap:wrap; gap:6px 26px; }
+  .hero .big { font-size: clamp(44px, 9vw, 68px); font-weight:680; font-variant-numeric: tabular-nums; letter-spacing:-.01em; }
+  .hero .unit { color:var(--muted); font-size:1rem; font-weight:550; margin-left:-14px; }
+  .hero .sub { color:var(--ink2); font-size:.9rem; font-variant-numeric: tabular-nums; }
+  .hero .sub b { color:var(--ink); font-weight:600; }
+  .tach { grid-column: 1 / -1; }
+  .tach .head { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:6px; }
+  .tach canvas { width:100%; height:140px; display:block; }
+  .chip { display:inline-flex; align-items:center; gap:7px; font-size:.82rem; font-weight:600;
+          border:1px solid var(--border); border-radius:999px; padding:4px 11px; color:var(--ink); }
+  .chip .dot { width:9px; height:9px; border-radius:50%; background:var(--muted); }
+  .chip.act .dot { background:var(--series); }
+  .chip.rec .dot { background:var(--series2); }
+  .tiles .v { font-size:1.9rem; margin-top:2px; }
+  .tiles .u { color:var(--muted); font-size:.85rem; font-weight:550; margin-left:5px; }
+  .tiles .note { color:var(--muted); font-size:.75rem; margin-top:3px; }
+  footer { color:var(--muted); font-size:.78rem; margin-top:22px; max-width:70ch; }
+  footer code { background:var(--surface); border:1px solid var(--border); border-radius:5px; padding:1px 5px; }
+  .warn { color:var(--critical); }
+</style>
+</head>
+<body class="viz-root">
+  <header>
+    <h1>Live HRV — Web Bluetooth + WebAssembly</h1>
+    <p>RR intervals from a Bluetooth heart-rate strap → the ChronoLab HRV core (Rust→WASM) → live metrics, entirely in the browser.</p>
+  </header>
+
+  <div class="controls">
+    <button id="connect" class="primary">Connect sensor</button>
+    <button id="simulate">Simulate</button>
+    <button id="wsview">Receive (WebSocket)</button>
+    <button id="wsshare" disabled>Share to bridge</button>
+    <button id="stop" disabled>Stop</button>
+    <button id="reset">Reset</button>
+  </div>
+  <div class="status" id="status">Idle. Connect a Bluetooth HR strap, press <b>Simulate</b>, or <b>Receive (WebSocket)</b> from a bridge.</div>
+
+  <main>
+    <section class="card hero">
+      <div><span class="big" id="hr">—</span><span class="unit"> bpm</span></div>
+      <div class="sub">beats <b id="beats">0</b> &nbsp;·&nbsp; session <b id="dur">0:00</b> &nbsp;·&nbsp; valid <b id="valid">—</b></div>
+    </section>
+
+    <section class="card tach">
+      <div class="head">
+        <div class="k">RR tachogram — last 150 beats (ms)</div>
+        <span class="chip" id="vqchip"><span class="dot"></span><span id="vqstate">—</span></span>
+      </div>
+      <canvas id="tach"></canvas>
+    </section>
+
+    <section class="card tiles"><div class="k">Gesamtvariabilität (SDNN)</div><div class="v"><span id="sdnn">—</span><span class="u">ms</span></div><div class="note">std of RR per 5-min block</div></section>
+    <section class="card tiles"><div class="k">RMSSD</div><div class="v"><span id="rmssd">—</span><span class="u">ms</span></div><div class="note">short-term variability</div></section>
+    <section class="card tiles"><div class="k">pNN50</div><div class="v"><span id="pnn50">—</span><span class="u">%</span></div><div class="note">|ΔRR| &gt; 50 ms</div></section>
+    <section class="card tiles"><div class="k">Erholungsfähigkeit (LRSA)</div><div class="v"><span id="lrsa">—</span></div><div class="note">log₁₀ median|ΔRR|</div></section>
+    <section class="card tiles"><div class="k">Vegetativer Quotient (VQ)</div><div class="v"><span id="vq">—</span></div><div class="note">ln(LF / HF), PSD</div></section>
+    <section class="card tiles"><div class="k">LF / HF power</div><div class="v"><span id="lfhf">—</span><span class="u">ms²</span></div><div class="note"><span id="lfhfsplit">—</span></div></section>
+    <section class="card tiles"><div class="k">Vitales Potential</div><div class="v"><span id="vitpot">—</span><span class="u">ms²</span></div><div class="note">exp(mean ln TOT)</div></section>
+    <section class="card tiles"><div class="k">VitalitätsIndex</div><div class="v"><span id="vitidx">—</span></div><div class="note">ln(TOT)·SDNN·LRSA</div></section>
+  </main>
+
+  <footer>
+    Web Bluetooth needs <b>Chrome or Edge</b> over <b>https or <code>http://localhost</code></b> (a secure context) — serve this
+    folder, e.g. <code>python3 -m http.server</code> from the repo root, then open <code>http://localhost:8000/web/</code>.
+    The sensor must expose the Heart Rate service with RR intervals (e.g. Polar H10). Metrics stabilise as data accumulates
+    (frequency-domain needs ~1–5 min per block). Reverse-engineering / research tool — <b>not a medical device</b>.
+  </footer>
+
+  <script type="module" src="./app.mjs"></script>
+</body>
+</html>
