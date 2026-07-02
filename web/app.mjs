@@ -175,7 +175,15 @@ function wsUrl() {
   return (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host;
 }
 function connectView() {
-  stop(); const url = wsUrl();
+  stop();
+  const override = new URLSearchParams(location.search).get('ws');
+  let url = override || wsUrl();
+  // An HTTPS static host (GitHub Pages) has no same-origin bridge and can't use ws:// — ask for a wss URL.
+  if (!override && location.protocol === 'https:') {
+    const entered = prompt('WebSocket bridge URL (wss://host) — run web/bridge-tunnel.sh or deploy web/fly.toml:', 'wss://');
+    if (!entered || !/^wss?:\/\/.+/.test(entered)) { setStatus('Need a <code>wss://</code> bridge URL (see the README: Fly.io or a cloudflared tunnel).'); return; }
+    url = entered;
+  }
   setStatus(`Connecting to bridge <b>${url}</b>…`);
   try { viewSock = new WebSocket(url); } catch (e) { setStatus('<span class="warn">Bad WebSocket URL:</span> ' + e.message); return; }
   mode = 'ws';
