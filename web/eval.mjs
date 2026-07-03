@@ -1,6 +1,7 @@
 // eval.mjs -- live HRV using the eval-core variant (hrv_eval_run). Same sensor/bridge plumbing as
 // app.mjs; different metric export. See web/eval.html.
 import { parseHeartRateMeasurement } from './hrm.mjs';
+import { reconstructMissedBeats } from './reconstruct.mjs';
 
 const KEYS = ["beats_in","beats_kept","kept_pct","duration_h","blocks","HR_sgolay","SDNN_pop","RMSSD",
   "pNN50_pct","IRRR","MADRR","TINN","HRVi","LF_ms2","HF_ms2","TOT_ms2","VQ","VitalesPotential","VitalitaetsIndex"];
@@ -13,6 +14,7 @@ const rr = [];
 let hrInstant = null;
 let dirty = false, mode = null, simTimer = null, rrWarned = false;
 let viewSock = null, shareSock = null;
+let reconstructOn = false, lastInserted = 0;
 
 // ---- wasm (shared hrv_core.wasm, eval-core export) ----
 const CAP = 200000;
@@ -25,12 +27,16 @@ async function loadWasm() {
 }
 function compute() {
   if (!W || rr.length < 2) return null;
-  const n = Math.min(rr.length, CAP);
-  const src = rr.length > CAP ? rr.slice(rr.length - CAP) : rr;
+  let src = rr.length > CAP ? rr.slice(rr.length - CAP) : rr.slice();
+  if (reconstructOn) { const r = reconstructMissedBeats(src); src = r.rr; lastInserted = r.inserted; } else lastInserted = 0;
+  if (src.length > CAP) src = src.slice(src.length - CAP);
+  const n = src.length;
   new Float64Array(W.memory.buffer, inPtr, n).set(src);
   W.hrv_eval_run(inPtr, n, outPtr);
   const out = new Float64Array(W.memory.buffer, outPtr, KEYS.length);
-  const o = {}; KEYS.forEach((k, i) => o[k] = out[i]); return o;
+  const o = {}; KEYS.forEach((k, i) => o[k] = out[i]);
+  $('recount').textContent = (reconstructOn && lastInserted) ? `(${lastInserted} recovered)` : '';
+  return o;
 }
 
 const f = (x, d = 0) => (x == null || Number.isNaN(x)) ? '—' : x.toFixed(d);
@@ -79,7 +85,7 @@ function drawTachogram() {
   const w = canvas.clientWidth, h = canvas.clientHeight || 140;
   if (canvas.width !== Math.round(w * dpr) || canvas.height !== Math.round(h * dpr)) { canvas.width = Math.round(w * dpr); canvas.height = Math.round(h * dpr); }
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, w, h);
-  const data = rr.slice(-150); if (data.length < 2) return;
+  const data = (reconstructOn ? reconstructMissedBeats(rr.slice(-400)).rr : rr).slice(-150); if (data.length < 2) return;
   const pad = 10, lo = Math.min(...data), hi = Math.max(...data), ymin = lo - 15, ymax = hi + 15, span = (ymax - ymin) || 1;
   const X = i => pad + (w - 2 * pad) * (i / (data.length - 1));
   const Y = v => (h - pad) - (h - 2 * pad) * ((v - ymin) / span);
@@ -137,7 +143,7 @@ function reset() {
   stop(); if (shareSock) { try { shareSock.close(); } catch {} shareSock = null; $('wsshare').textContent = 'Share to bridge'; }
   rr.length = 0; hrInstant = null; rrWarned = false; mode = null; updateHero(); drawTachogram();
   ['bkept','bpct','blocks','hrsg','sdnn','rmssd','pnn50','irrr','madrr','tinn','hrvi','vq','lfhf','vitpot','vitidx'].forEach(id => $(id).textContent = '—');
-  $('lfhfsplit').textContent = '—'; $('vqchip').className = 'chip'; $('vqstate').textContent = '—'; setStatus('Reset.');
+  $('lfhfsplit').textContent = '—'; $('vqchip').className = 'chip'; $('vqstate').textContent = '—'; $('recount').textContent = ''; setStatus('Reset.');
 }
 function setRunning(on) { $('stop').disabled = !on; $('wsshare').disabled = !(on && (mode === 'ble' || mode === 'sim')); }
 
@@ -174,6 +180,9 @@ $('wsview').addEventListener('click', connectView);
 $('wsshare').addEventListener('click', toggleShare);
 $('stop').addEventListener('click', stop);
 $('reset').addEventListener('click', reset);
+const recon = $('reconstruct');
+reconstructOn = localStorage.getItem('hrvReconstruct') === '1'; recon.checked = reconstructOn;
+recon.addEventListener('change', () => { reconstructOn = recon.checked; localStorage.setItem('hrvReconstruct', reconstructOn ? '1' : '0'); dirty = true; drawTachogram(); });
 if (!navigator.bluetooth) $('connect').title = 'Web Bluetooth needs Chrome/Edge over https or localhost';
 
 loadWasm().then(() => setStatus('Ready (eval-core variant). Connect a Bluetooth HR strap, or press <b>Simulate</b>.'))

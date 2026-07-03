@@ -1,5 +1,6 @@
 // app.mjs -- Web Bluetooth heart-rate -> hrv_core.wasm -> live HRV dashboard.
 import { parseHeartRateMeasurement } from './hrm.mjs';
+import { reconstructMissedBeats } from './reconstruct.mjs';
 
 const KEYS = ["beats","duration_h","valid_pct","blocks","blocks_valid","HR_bpm",
   "SDNN_sample_ms","SDNN_pop_ms","RMSSD_ms","NN50","pNN50","LRSA","MADRR_ms",
@@ -15,6 +16,7 @@ const rr = [];              // full session RR intervals (ms)
 let hrInstant = null;
 let dirty = false, mode = null, simTimer = null, rrWarned = false;
 let viewSock = null, shareSock = null;   // WebSocket bridge: receive from / share to
+let reconstructOn = false, lastInserted = 0;   // opt-in missed-beat reconstruction
 
 // ---- wasm ----
 const CAP = 200000;
@@ -29,12 +31,15 @@ async function loadWasm() {
 }
 function compute() {
   if (!W || rr.length < 2) return null;
-  const n = Math.min(rr.length, CAP);
-  const src = rr.length > CAP ? rr.slice(rr.length - CAP) : rr;
+  let src = rr.length > CAP ? rr.slice(rr.length - CAP) : rr.slice();
+  if (reconstructOn) { const r = reconstructMissedBeats(src); src = r.rr; lastInserted = r.inserted; } else lastInserted = 0;
+  if (src.length > CAP) src = src.slice(src.length - CAP);
+  const n = src.length;
   new Float64Array(W.memory.buffer, inPtr, n).set(src);   // buffer current before the call
   W.hrv_run(inPtr, n, outPtr);
   const out = new Float64Array(W.memory.buffer, outPtr, KEYS.length); // re-read after possible grow
   const o = {}; KEYS.forEach((k, i) => o[k] = out[i]);
+  $('recount').textContent = (reconstructOn && lastInserted) ? `(${lastInserted} recovered)` : '';
   return o;
 }
 
@@ -90,7 +95,7 @@ function drawTachogram() {
   }
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, w, h);
-  const data = rr.slice(-150);
+  const data = (reconstructOn ? reconstructMissedBeats(rr.slice(-400)).rr : rr).slice(-150);
   if (data.length < 2) return;
   const pad = 10;
   const lo = Math.min(...data), hi = Math.max(...data);
@@ -163,7 +168,7 @@ function reset() { stop();
   if (shareSock) { try { shareSock.close(); } catch {} shareSock = null; $('wsshare').textContent = 'Share to bridge'; }
   rr.length = 0; hrInstant = null; rrWarned = false; mode = null; updateHero(); drawTachogram();
   ['valid','sdnn','rmssd','pnn50','lrsa','vq','lfhf','vitpot','vitidx'].forEach(id => $(id).textContent = '—');
-  $('lfhfsplit').textContent = '—'; $('vqchip').className = 'chip'; $('vqstate').textContent = '—';
+  $('lfhfsplit').textContent = '—'; $('vqchip').className = 'chip'; $('vqstate').textContent = '—'; $('recount').textContent = '';
   setStatus('Reset.'); }
 
 function setRunning(on) { $('stop').disabled = !on; $('wsshare').disabled = !(on && (mode === 'ble' || mode === 'sim')); }
@@ -209,6 +214,9 @@ $('wsview').addEventListener('click', connectView);
 $('wsshare').addEventListener('click', toggleShare);
 $('stop').addEventListener('click', stop);
 $('reset').addEventListener('click', reset);
+const recon = $('reconstruct');
+reconstructOn = localStorage.getItem('hrvReconstruct') === '1'; recon.checked = reconstructOn;
+recon.addEventListener('change', () => { reconstructOn = recon.checked; localStorage.setItem('hrvReconstruct', reconstructOn ? '1' : '0'); dirty = true; drawTachogram(); });
 if (!navigator.bluetooth) $('connect').title = 'Web Bluetooth needs Chrome/Edge over https or localhost';
 
 loadWasm().then(() => setStatus('Ready. Connect a Bluetooth HR strap, or press <b>Simulate</b>.'))
