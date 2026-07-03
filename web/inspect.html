@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Polar H10 — HRM data-format inspector</title>
+<style>
+  .viz-root{
+    --page:#f9f9f7;--surface:#fcfcfb;--ink:#0b0b0b;--ink2:#52514e;--muted:#898781;
+    --border:rgba(11,11,11,0.10);--series:#2a78d6;--good:#0ca30c;--warning:#fab219;--critical:#d03b3b;
+    color-scheme:light dark;
+  }
+  @media (prefers-color-scheme:dark){.viz-root{
+    --page:#0d0d0d;--surface:#1a1a19;--ink:#fff;--ink2:#c3c2b7;--muted:#898781;
+    --border:rgba(255,255,255,0.10);--series:#3987e5;
+  }}
+  *{box-sizing:border-box}html,body{margin:0}
+  body.viz-root{background:var(--page);color:var(--ink);font-family:system-ui,-apple-system,"Segoe UI",sans-serif;line-height:1.45;padding:clamp(16px,4vw,40px)}
+  h1{font-size:1.3rem;font-weight:650;margin:0 0 2px}
+  header p{margin:0;color:var(--ink2);font-size:.9rem}
+  .controls{display:flex;gap:10px;flex-wrap:wrap;margin:18px 0 8px}
+  button{font:inherit;font-weight:550;color:var(--ink);background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:9px 15px;cursor:pointer}
+  button.primary{background:var(--series);color:#fff;border-color:transparent}
+  .status{color:var(--ink2);font-size:.85rem;min-height:1.2em;margin-bottom:16px}
+  .status b{color:var(--ink)}
+  .verdict{border:1px solid var(--border);border-left-width:5px;border-radius:12px;padding:14px 16px;background:var(--surface);margin-bottom:16px}
+  .verdict.pass{border-left-color:var(--good)}
+  .verdict.warn{border-left-color:var(--warning)}
+  .verdict.fail{border-left-color:var(--critical)}
+  .verdict .h{font-weight:650;font-size:1.05rem;display:flex;align-items:center;gap:8px}
+  .verdict .d{color:var(--ink2);font-size:.9rem;margin-top:4px}
+  main{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(280px,1fr))}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px 16px}
+  .card h2{font-size:.85rem;font-weight:600;color:var(--ink2);margin:0 0 10px;text-transform:none}
+  table{width:100%;border-collapse:collapse;font-size:.85rem}
+  td,th{text-align:left;padding:3px 6px;border-bottom:1px solid var(--border);vertical-align:top}
+  th{color:var(--muted);font-weight:600}
+  td.v{font-variant-numeric:tabular-nums;text-align:right;white-space:nowrap}
+  .mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.82rem;word-break:break-all}
+  .yes{color:var(--good);font-weight:600}.no{color:var(--critical);font-weight:600}
+  .rr-ok{color:var(--good)}.rr-bad{color:var(--critical)}
+  footer{color:var(--muted);font-size:.78rem;margin-top:20px;max-width:72ch}
+  code{background:var(--surface);border:1px solid var(--border);border-radius:5px;padding:1px 5px}
+</style>
+</head>
+<body class="viz-root">
+  <header>
+    <h1>Polar H10 — HRM data-format inspector</h1>
+    <p>Connects to a Bluetooth heart-rate strap and checks whether it delivers the Heart Rate
+       Measurement format this project needs — HR plus <b>RR intervals</b>. Chrome/Edge only.</p>
+  </header>
+
+  <div class="controls">
+    <button id="connect" class="primary">Connect Polar H10</button>
+    <button id="copy" disabled>Copy report</button>
+  </div>
+  <div class="status" id="status">Idle. Click <b>Connect</b> and pick your strap.</div>
+
+  <div class="verdict" id="verdict" style="display:none"><div class="h" id="vh"></div><div class="d" id="vd"></div></div>
+
+  <main id="panels" style="display:none">
+    <section class="card">
+      <h2>Device</h2>
+      <table><tbody id="dev"></tbody></table>
+    </section>
+    <section class="card">
+      <h2>Latest notification — flags byte</h2>
+      <div class="mono" id="rawbytes" style="margin-bottom:8px"></div>
+      <table><tbody id="flags"></tbody></table>
+    </section>
+    <section class="card">
+      <h2>Latest values</h2>
+      <table><tbody id="vals"></tbody></table>
+    </section>
+    <section class="card">
+      <h2>RR intervals (this notification)</h2>
+      <table><thead><tr><th>#</th><th>raw (1/1024 s)</th><th>ms</th><th>range</th></tr></thead><tbody id="rr"></tbody></table>
+    </section>
+  </main>
+
+  <footer>
+    Nothing leaves your browser. Expected Polar H10 frame: flags with the <b>RR-Interval</b> bit set
+    (e.g. <code>0x16</code>), HR as uint8, and one-or-more RR values in 1/1024 s. If you don't see RR
+    intervals, HRV can't be computed. Research tool — not a medical device.
+  </footer>
+
+  <script type="module">
+  import { parseHeartRateMeasurement } from './hrm.mjs';
+  const $ = id => document.getElementById(id);
+  const setStatus = h => $('status').innerHTML = h;
+  const hex = b => '0x' + b.toString(16).toUpperCase().padStart(2,'0');
+  const bin = b => b.toString(2).padStart(8,'0');
+  const row = (k,v,cls='') => `<tr><td>${k}</td><td class="v ${cls}">${v}</td></tr>`;
+
+  let notifs=0, rrNotifs=0, beats=0, inRange=0, lastReport='';
+
+  function verdict(){
+    const v=$('verdict'), h=$('vh'), d=$('vd'); v.style.display='block';
+    if(notifs<2){ v.className='verdict warn'; h.textContent='… waiting for a few notifications'; d.textContent='Keep the strap on your chest; a reading arrives roughly once per second.'; return; }
+    if(rrNotifs===0){
+      v.className='verdict fail';
+      h.innerHTML='✗ &nbsp;No RR intervals — HRV not possible';
+      d.innerHTML=`${notifs} notifications, all HR-only (the RR-Interval flag bit is never set). This sensor/mode won't drive HRV. On a Polar H10 make sure you're using the standard Heart Rate service (this is the default); some optical wrist monitors only report HR.`;
+    } else {
+      const okFrac = beats ? inRange/beats : 0;
+      const good = okFrac>0.8;
+      v.className = good ? 'verdict pass' : 'verdict warn';
+      h.innerHTML = good ? '✓ &nbsp;Correct format — RR intervals present' : '⚠ &nbsp;RR present, but many out of range';
+      d.innerHTML = `${rrNotifs}/${notifs} notifications carried RR; ${beats} beats, ${(okFrac*100).toFixed(0)}% within 300–2000 ms. ${good?'This is exactly what the demo needs.':'Out-of-range values usually mean loose contact or motion — moisten the strap and stay still.'}`;
+    }
+  }
+
+  function onHrm(dv){
+    notifs++;
+    const flags=dv.getUint8(0);
+    const { hr, rr, contact } = parseHeartRateMeasurement(dv);
+    if(rr.length){ rrNotifs++; beats+=rr.length; }
+    // raw bytes
+    const bytes=[...new Uint8Array(dv.buffer)].map(hex).join(' ');
+    $('rawbytes').textContent = bytes;
+    // flags breakdown
+    const f = [
+      ['flags byte', `${hex(flags)} = ${bin(flags)}`],
+      ['bit0 HR format', (flags&1)?'uint16':'uint8'],
+      ['bit2 contact supported', (flags&4)?'yes':'no'],
+      ['bit1 contact detected', (flags&4)?((flags&2)?'<span class="yes">yes</span>':'<span class="no">no</span>'):'n/a'],
+      ['bit3 energy expended', (flags&8)?'present':'absent'],
+      ['bit4 RR-Interval present', (flags&16)?'<span class="yes">yes</span>':'<span class="no">no</span>'],
+    ];
+    $('flags').innerHTML = f.map(([k,v])=>row(k,v)).join('');
+    // values
+    $('vals').innerHTML =
+      row('heart rate', hr+' bpm') +
+      row('RR this frame', rr.length) +
+      row('contact', contact===null?'not reported':(contact?'<span class="yes">detected</span>':'<span class="no">none</span>')) +
+      row('notifications', notifs) +
+      row('RR-bearing', `${rrNotifs} (${notifs?(100*rrNotifs/notifs).toFixed(0):0}%)`) +
+      row('total beats', beats);
+    // rr table
+    $('rr').innerHTML = rr.length ? rr.map((ms,i)=>{
+      const raw=Math.round(ms*1024/1000), ok=ms>=300&&ms<=2000; if(ok)inRange++;
+      return `<tr><td>${i+1}</td><td class="v">${raw}</td><td class="v ${ok?'rr-ok':'rr-bad'}">${ms.toFixed(1)}</td><td class="v">${ok?'✓':'out'}</td></tr>`;
+    }).join('') : '<tr><td colspan="4" style="color:var(--muted)">— none in this notification —</td></tr>';
+
+    lastReport =
+`Polar H10 HRM inspector report
+device: ${deviceName}
+notifications: ${notifs}   RR-bearing: ${rrNotifs}   beats: ${beats}   in-range: ${inRange}
+latest raw bytes: ${bytes}
+flags: ${hex(flags)} (HR ${(flags&1)?'uint16':'uint8'}, contact ${(flags&4)?((flags&2)?'yes':'no'):'n/a'}, RR ${(flags&16)?'YES':'no'})
+latest HR: ${hr} bpm   RR(ms): ${rr.map(x=>x.toFixed(1)).join(', ')||'(none)'}`;
+    verdict();
+  }
+
+  let deviceName='(unknown)';
+  $('connect').addEventListener('click', async () => {
+    if(!navigator.bluetooth){ setStatus('<b style="color:var(--critical)">Web Bluetooth unavailable</b> — use Chrome/Edge over https or http://localhost.'); return; }
+    try{
+      setStatus('Requesting device…');
+      const dev = await navigator.bluetooth.requestDevice({ filters:[{ services:['heart_rate'] }] });
+      deviceName = dev.name || '(unnamed)';
+      dev.addEventListener('gattserverdisconnected', ()=>setStatus('Disconnected.'));
+      setStatus('Connecting…');
+      const server = await dev.gatt.connect();
+      const svc = await server.getPrimaryService('heart_rate');
+      const ch = await svc.getCharacteristic('heart_rate_measurement');
+      $('dev').innerHTML = row('name', deviceName) + row('service', '0x180D heart_rate') + row('characteristic','0x2A37 measurement');
+      $('panels').style.display='grid'; $('copy').disabled=false;
+      await ch.startNotifications();
+      ch.addEventListener('characteristicvaluechanged', e => onHrm(e.target.value));
+      setStatus(`Connected: <b>${deviceName}</b>. Reading Heart Rate Measurement…`);
+    }catch(err){ setStatus('<b style="color:var(--critical)">Connect failed:</b> '+err.message); }
+  });
+  $('copy').addEventListener('click', ()=>{ navigator.clipboard?.writeText(lastReport); setStatus('Report copied — paste it back for a second opinion.'); });
+  </script>
+</body>
+</html>
