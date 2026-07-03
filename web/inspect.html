@@ -76,6 +76,11 @@
       <h2>RR intervals (this notification)</h2>
       <table><thead><tr><th>#</th><th>raw (1/1024 s)</th><th>ms</th><th>range</th></tr></thead><tbody id="rr"></tbody></table>
     </section>
+    <section class="card" style="grid-column:1 / -1">
+      <h2>Spike log <span id="spikesum" style="font-weight:400;color:var(--muted)"></span></h2>
+      <table><thead><tr><th>beat</th><th>Δbeats</th><th>flags</th><th>raw bytes (whole frame)</th><th>RR ms</th></tr></thead><tbody id="spikes"></tbody></table>
+      <button id="copyspikes" style="margin-top:10px" disabled>Copy spike log</button>
+    </section>
   </main>
 
   <footer>
@@ -93,6 +98,20 @@
   const row = (k,v,cls='') => `<tr><td>${k}</td><td class="v ${cls}">${v}</td></tr>`;
 
   let notifs=0, rrNotifs=0, beats=0, inRange=0, lastReport='';
+  // spike capture: flag any RR out of [300,2000] ms or >30% off the recent median; log the frame.
+  const rrHist=[]; let beatIdx=0; const spikeLog=[]; let lastSpikeBeat=null;
+  const med = a => { if(!a.length) return NaN; const s=[...a].sort((x,y)=>x-y); return s[s.length>>1]; };
+  function renderSpikes(){
+    const gaps=spikeLog.map(s=>s.gap).filter(g=>g!=null);
+    const mg=gaps.length? gaps.reduce((a,b)=>a+b,0)/gaps.length : NaN;
+    $('spikesum').textContent = spikeLog.length
+      ? `— ${spikeLog.length} spikes over ${beatIdx} beats, ~every ${mg.toFixed(0)} beats (Δ range ${Math.min(...gaps)}–${Math.max(...gaps)})`
+      : `— none over ${beatIdx} beats`;
+    $('spikes').innerHTML = spikeLog.slice(-15).map(s=>
+      `<tr><td>${s.beat}</td><td class="v">${s.gap??'—'}</td><td class="mono">${hex(s.flags)}</td><td class="mono">${s.hex}</td><td class="v rr-bad">${s.rr.join(', ')}</td></tr>`
+    ).join('') || '<tr><td colspan="5" style="color:var(--muted)">— no spikes yet —</td></tr>';
+    $('copyspikes').disabled = spikeLog.length===0;
+  }
 
   function verdict(){
     const v=$('verdict'), h=$('vh'), d=$('vd'); v.style.display='block';
@@ -141,6 +160,21 @@
       const raw=Math.round(ms*1024/1000), ok=ms>=300&&ms<=2000; if(ok)inRange++;
       return `<tr><td>${i+1}</td><td class="v">${raw}</td><td class="v ${ok?'rr-ok':'rr-bad'}">${ms.toFixed(1)}</td><td class="v">${ok?'✓':'out'}</td></tr>`;
     }).join('') : '<tr><td colspan="4" style="color:var(--muted)">— none in this notification —</td></tr>';
+    // spike detection (per frame): a spike RR never joins the reference median
+    let frameSpike=false;
+    for(const ms of rr){
+      beatIdx++;
+      const m=med(rrHist);
+      const isSp = ms<300 || ms>2000 || (rrHist.length>=5 && Math.abs(ms-m) > 0.30*m);
+      if(isSp) frameSpike=true; else { rrHist.push(ms); if(rrHist.length>30) rrHist.shift(); }
+    }
+    if(frameSpike){
+      const gap = lastSpikeBeat==null ? null : beatIdx-lastSpikeBeat;
+      lastSpikeBeat = beatIdx;
+      spikeLog.push({ beat:beatIdx, gap, flags, hex:bytes, rr:rr.map(x=>+x.toFixed(1)) });
+      if(spikeLog.length>60) spikeLog.shift();
+    }
+    renderSpikes();
 
     lastReport =
 `Polar H10 HRM inspector report
@@ -172,6 +206,13 @@ latest HR: ${hr} bpm   RR(ms): ${rr.map(x=>x.toFixed(1)).join(', ')||'(none)'}`;
     }catch(err){ setStatus('<b style="color:var(--critical)">Connect failed:</b> '+err.message); }
   });
   $('copy').addEventListener('click', ()=>{ navigator.clipboard?.writeText(lastReport); setStatus('Report copied — paste it back for a second opinion.'); });
+  $('copyspikes').addEventListener('click', ()=>{
+    const gaps=spikeLog.map(s=>s.gap).filter(g=>g!=null);
+    const mg=gaps.length? (gaps.reduce((a,b)=>a+b,0)/gaps.length).toFixed(0) : '—';
+    const lines=spikeLog.map(s=>`beat ${s.beat}  Δ${s.gap??'—'}  flags ${hex(s.flags)}  bytes ${s.hex}  RR ${s.rr.join(', ')}`);
+    const rep=`Spike log — ${deviceName}\n${spikeLog.length} spikes over ${beatIdx} beats, ~every ${mg} beats\ngaps: ${gaps.join(', ')}\n`+lines.join('\n');
+    navigator.clipboard?.writeText(rep); setStatus('Spike log copied — paste it back and I will decode the frames.');
+  });
   </script>
 </body>
 </html>
