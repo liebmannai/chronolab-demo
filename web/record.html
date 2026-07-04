@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Polar H10 — extract & download ECG / RR</title>
+<style>
+  .viz-root{
+    --page:#f9f9f7;--surface:#fcfcfb;--ink:#0b0b0b;--ink2:#52514e;--muted:#898781;
+    --grid:#e1e0d9;--baseline:#c3c2b7;--border:rgba(11,11,11,0.10);
+    --series:#4a3aa7;--series2:#2a78d6;--good:#0ca30c;--critical:#d03b3b;color-scheme:light dark;
+  }
+  @media (prefers-color-scheme:dark){.viz-root{
+    --page:#0d0d0d;--surface:#1a1a19;--ink:#fff;--ink2:#c3c2b7;--muted:#898781;
+    --grid:#2c2c2a;--baseline:#383835;--border:rgba(255,255,255,0.10);--series:#9085e9;--series2:#3987e5;
+  }}
+  *{box-sizing:border-box}html,body{margin:0}
+  body.viz-root{background:var(--page);color:var(--ink);font-family:system-ui,-apple-system,"Segoe UI",sans-serif;line-height:1.4;padding:clamp(16px,4vw,40px)}
+  header h1{font-size:1.35rem;font-weight:650;margin:0 0 2px}header p{margin:0;color:var(--ink2);font-size:.9rem}
+  .nav{font-size:.82rem;margin:6px 0 0}.nav a{color:var(--series2);text-decoration:none;font-weight:550}
+  .controls{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:18px 0 6px}
+  button{font:inherit;font-weight:550;color:var(--ink);background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:9px 15px;cursor:pointer}
+  button.primary{background:var(--series);color:#fff;border-color:transparent}
+  button:disabled{opacity:.45;cursor:not-allowed}
+  .status{color:var(--ink2);font-size:.85rem;min-height:1.2em;margin:2px 0 18px}.status b{color:var(--ink)}.warn{color:var(--critical)}
+  main{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(300px,1fr))}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px 18px}
+  .card h2{font-size:.95rem;font-weight:650;margin:0 0 4px}.card .sub{color:var(--ink2);font-size:.82rem;margin-bottom:10px}
+  .row{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:10px}
+  .stat{font-variant-numeric:tabular-nums}.stat b{font-weight:650}
+  .k{color:var(--muted);font-size:.8rem}
+  canvas{width:100%;height:150px;display:block;background:transparent}
+  .dl{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+  footer{color:var(--muted);font-size:.78rem;margin-top:22px;max-width:76ch}
+  code{background:var(--surface);border:1px solid var(--border);border-radius:5px;padding:1px 5px}
+</style>
+</head>
+<body class="viz-root">
+  <header>
+    <h1>Polar H10 — extract &amp; download ECG / RR</h1>
+    <p>Capture the H10's raw <b>ECG</b> (130 Hz, µV, via the Polar Measurement Data service) and/or
+       <b>RR intervals</b> (via the Heart Rate service), then download them. Chrome/Edge only.</p>
+    <p class="nav">↔ <a href="./">HRV demo</a> · <a href="./eval.html">eval-core variant</a> · <a href="./inspect.html">format inspector</a></p>
+  </header>
+
+  <div class="controls">
+    <button id="connect" class="primary">Connect Polar H10</button>
+    <button id="reset" disabled>Reset captured data</button>
+  </div>
+  <div class="status" id="status">Idle. Click <b>Connect</b> and pick your H10.</div>
+
+  <main>
+    <section class="card">
+      <h2>ECG — raw 130 Hz</h2>
+      <div class="sub">Polar Measurement Data service (µV). Streams while recording.</div>
+      <div class="row">
+        <button id="ecgStart" disabled>Start ECG</button>
+        <button id="ecgStop" disabled>Stop</button>
+        <span class="stat k">samples <b id="ecgN" class="stat">0</b> · <b id="ecgDur" class="stat">0.0</b> s · <b id="ecgHz">130</b> Hz</span>
+      </div>
+      <canvas id="ecg"></canvas>
+      <div class="dl">
+        <button id="dlEcgCsv" disabled>Download ECG (.csv)</button>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>RR intervals</h2>
+      <div class="sub">Heart Rate Measurement (0x2A37). Beat-to-beat intervals in ms.</div>
+      <div class="row">
+        <button id="rrStart" disabled>Start RR</button>
+        <button id="rrStop" disabled>Stop</button>
+        <span class="stat k">beats <b id="rrN" class="stat">0</b> · <b id="rrDur" class="stat">0:00</b> · HR <b id="rrHr">—</b> bpm</span>
+      </div>
+      <canvas id="rr"></canvas>
+      <div class="dl">
+        <button id="dlRrTxt" disabled>Download RR (.txt)</button>
+        <button id="dlRrCsv" disabled>RR (.csv)</button>
+        <button id="dlJson" disabled>Session (.json)</button>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    Everything runs in your browser; nothing is uploaded. The <code>.txt</code> RR file is one interval
+    (ms) per line — drop it straight into <code>tools/hrv_run.py</code> or the WASM core. <br>
+    Note: this captures the <b>live stream</b> while you record. The H10 can also record to its own
+    internal memory (offline recording), but that read-out is an AES-encrypted Polar-SDK protocol not
+    reimplemented here. Web Bluetooth needs Chrome/Edge over https or <code>localhost</code>.
+    Research tool — <b>not a medical device</b>.
+  </footer>
+
+  <script type="module" src="./record.mjs"></script>
+</body>
+</html>
