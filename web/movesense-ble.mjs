@@ -29,24 +29,32 @@ export const PROBE_SERVICES = [
   '0000180d-0000-1000-8000-00805f9b34fb', // Heart Rate
 ];
 
-export function subscribeCmd(path, ref = MS_REF_HR) {
-  return new Uint8Array([1, ref, ...new TextEncoder().encode(path)]);
-}
-export function unsubscribeCmd(ref = MS_REF_HR) {
-  return new Uint8Array([2, ref]);
+// Movesense GATT SensorData Protocol (GSP) command opcodes.
+export const GSP = { HELLO: 0x00, SUBSCRIBE: 0x01, UNSUBSCRIBE: 0x02, FETCH_LOG: 0x03, GET: 0x04, CLEAR_LOGBOOK: 0x05 };
+const enc = new TextEncoder();
+// command = [opcode, reference, ...data]. SUBSCRIBE/GET take a NULL-TERMINATED utf-8 path.
+export const helloCmd       = (ref = MS_REF_HR) => new Uint8Array([GSP.HELLO, ref]);
+export const subscribeCmd   = (path, ref = MS_REF_HR) => new Uint8Array([GSP.SUBSCRIBE, ref, ...enc.encode(path), 0]);
+export const unsubscribeCmd = (ref = MS_REF_HR) => new Uint8Array([GSP.UNSUBSCRIBE, ref]);
+export const getCmd         = (path, ref = MS_REF_HR) => new Uint8Array([GSP.GET, ref, ...enc.encode(path), 0]);
+export const clearLogbookCmd = (ref = MS_REF_HR) => new Uint8Array([GSP.CLEAR_LOGBOOK, ref]);
+export function fetchLogCmd(logId, ref = MS_REF_HR) {
+  const b = new Uint8Array([GSP.FETCH_LOG, ref, 0, 0, 0, 0]);
+  new DataView(b.buffer).setUint32(2, logId >>> 0, true); // uint32 LE logID
+  return b;
 }
 
-// Parse a Movesense notification for the HR resource (/Meas/HR).
-// -> { respType, ref, average, rr:[ms,...] }  (rr empty for non-data / command responses)
+// Parse a GSP DATA notification (opcode 0x02) for the HR resource (/Meas/HR). SBEM: float32 average
+// then a uint8-length-prefixed uint16[] rrData (ms). -> { respType, ref, average, rr:[ms,...] }.
 export function parseMovesenseHr(dv) {
   if (dv.byteLength < 2) return null;
   const respType = dv.getUint8(0), ref = dv.getUint8(1);
-  if (respType !== 2 || dv.byteLength < 6) return { respType, ref, average: NaN, rr: [] };
+  if (respType !== 0x02 || dv.byteLength < 6) return { respType, ref, average: NaN, rr: [] };
   const average = dv.getFloat32(2, true);
   const rr = [];
-  for (let i = 6; i + 2 <= dv.byteLength; i += 2) {
-    const v = dv.getUint16(i, true);
-    if (v > 0 && v < 4000) rr.push(v); // rrData is in ms
-  }
+  let i = 6;
+  const remU16 = Math.floor((dv.byteLength - 7) / 2);
+  if (i < dv.byteLength && dv.getUint8(i) === remU16 && remU16 >= 0) i += 1; // consume SBEM array length byte if present
+  for (; i + 2 <= dv.byteLength; i += 2) { const v = dv.getUint16(i, true); if (v > 0 && v < 4000) rr.push(v); }
   return { respType, ref, average, rr };
 }

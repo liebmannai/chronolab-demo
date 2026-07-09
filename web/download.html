@@ -57,19 +57,21 @@
     <section class="card">
       <h2>Commands (Whiteboard over NUS)</h2>
       <div class="cmds" id="cmds">
-        <button data-path="/HeartBalance/Status" disabled>Status</button>
-        <button data-path="/HeartBalance/PeakData" disabled>PeakData (RR)</button>
-        <button data-path="/HeartBalance/MetaData" disabled>MetaData</button>
-        <button data-path="/HeartBalance/AccData" disabled>AccData</button>
-        <button data-path="/Info" disabled>Info</button>
-        <button id="unsub" disabled>Unsubscribe</button>
-        <button id="probe" class="primary" disabled>Auto-probe protocol</button>
+        <button id="hello" disabled>HELLO</button>
+        <button data-get="/Info" disabled>GET /Info</button>
+        <button data-get="/HeartBalance/Status" disabled>GET Status</button>
+        <button data-sub="/HeartBalance/PeakData" disabled>SUB PeakData</button>
+        <button data-sub="/Meas/HR" disabled>SUB HR</button>
+        <button id="fetchlog" disabled>FETCH_LOG</button>
+        <button id="unsub" disabled>Unsub</button>
+        <button id="probe" class="primary" disabled>Auto-probe</button>
       </div>
+      <div class="controls" style="margin:0 0 4px"><input type="text" id="logid" value="0" style="min-width:90px" placeholder="log id" disabled> <span style="font-size:.76rem;color:var(--muted)">← FETCH_LOG id (uint32)</span></div>
       <div class="controls" style="margin:0">
-        <input type="text" id="raw" placeholder="raw hex, e.g. 01 63 2f 4d 65 61 73 2f 48 52" disabled>
+        <input type="text" id="raw" placeholder="raw hex, e.g. 04 0a 2f 49 6e 66 6f 00" disabled>
         <button id="sendRaw" disabled>Send</button>
       </div>
-      <div style="font-size:.76rem;color:var(--muted);margin-top:6px">Preset = subscribe <code>[1, ref, path]</code>. Use raw hex to try exact bytes.</div>
+      <div style="font-size:.76rem;color:var(--muted);margin-top:6px">GSP: HELLO <code>[00,ref]</code> · GET <code>[04,ref,path,00]</code> · SUB <code>[01,ref,path,00]</code> · FETCH_LOG <code>[03,ref,id₃₂]</code></div>
     </section>
 
     <section class="card" style="grid-column:1 / -1">
