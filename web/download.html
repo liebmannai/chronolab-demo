@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Download recording — Movesense / HeartBalance</title>
+<style>
+  .viz-root{
+    --page:#f9f9f7;--surface:#fcfcfb;--ink:#0b0b0b;--ink2:#52514e;--muted:#898781;
+    --border:rgba(11,11,11,0.10);--series:#e87ba4;--series2:#2a78d6;--good:#0ca30c;--critical:#d03b3b;color-scheme:light dark;
+  }
+  @media (prefers-color-scheme:dark){.viz-root{
+    --page:#0d0d0d;--surface:#1a1a19;--ink:#fff;--ink2:#c3c2b7;--muted:#898781;
+    --border:rgba(255,255,255,0.10);--series:#d55181;--series2:#3987e5;
+  }}
+  *{box-sizing:border-box}html,body{margin:0}
+  body.viz-root{background:var(--page);color:var(--ink);font-family:system-ui,-apple-system,"Segoe UI",sans-serif;line-height:1.4;padding:clamp(16px,4vw,40px)}
+  header h1{font-size:1.3rem;font-weight:650;margin:0 0 2px}header p{margin:0;color:var(--ink2);font-size:.9rem}
+  .nav{font-size:.82rem;margin:6px 0 0}.nav a{color:var(--series2);text-decoration:none;font-weight:550}
+  .controls{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:16px 0 6px}
+  button{font:inherit;font-weight:550;color:var(--ink);background:var(--surface);border:1px solid var(--border);border-radius:9px;padding:8px 13px;cursor:pointer;font-size:.9rem}
+  button.primary{background:var(--series);color:#fff;border-color:transparent}button:disabled{opacity:.45;cursor:not-allowed}
+  input[type=text]{font:inherit;font-family:ui-monospace,Menlo,monospace;font-size:.85rem;padding:7px 10px;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--ink);min-width:230px}
+  .status{color:var(--ink2);font-size:.85rem;min-height:1.2em;margin:8px 0 16px}.status b{color:var(--ink)}.warn{color:var(--critical)}
+  .grid{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(320px,1fr))}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px 16px}
+  .card h2{font-size:.9rem;font-weight:650;margin:0 0 8px}
+  .mono{font-family:ui-monospace,Menlo,monospace;font-size:.78rem;white-space:pre-wrap;word-break:break-all}
+  #svcs,#log,#preview{max-height:230px;overflow:auto;background:var(--page);border:1px solid var(--border);border-radius:8px;padding:8px}
+  .cmds{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:8px}
+  .stat{font-variant-numeric:tabular-nums}.stat b{font-weight:650}
+  footer{color:var(--muted);font-size:.78rem;margin-top:20px;max-width:78ch}code{background:var(--surface);border:1px solid var(--border);border-radius:5px;padding:1px 5px}
+</style>
+</head>
+<body class="viz-root">
+  <header>
+    <h1>Download recording — Movesense / HeartBalance</h1>
+    <p>Connect the sensor and pull its on-device data over BLE (Movesense Whiteboard over Nordic UART
+       Service). <b>Experimental:</b> the exact command framing is being reverse-engineered — this
+       tool enumerates the GATT, sends candidate commands, logs every raw frame, and downloads
+       whatever the sensor returns. Chrome/Edge only.</p>
+    <p class="nav">↔ <a href="./import.html">analyse a recording</a> · <a href="./movesense.html">Movesense live</a> · <a href="./">HRV demo</a></p>
+  </header>
+
+  <div class="controls">
+    <button id="connect" class="primary">Connect sensor</button>
+    <button id="clear" disabled>Clear capture</button>
+  </div>
+  <div class="status" id="status">Idle. Connect and pick your sensor.</div>
+
+  <div class="grid">
+    <section class="card">
+      <h2>Device GATT (services · characteristics)</h2>
+      <div class="mono" id="svcs">—</div>
+    </section>
+
+    <section class="card">
+      <h2>Commands (Whiteboard over NUS)</h2>
+      <div class="cmds" id="cmds">
+        <button data-path="/HeartBalance/Status" disabled>Status</button>
+        <button data-path="/HeartBalance/PeakData" disabled>PeakData (RR)</button>
+        <button data-path="/HeartBalance/MetaData" disabled>MetaData</button>
+        <button data-path="/HeartBalance/AccData" disabled>AccData</button>
+        <button data-path="/Info" disabled>Info</button>
+        <button id="unsub" disabled>Unsubscribe</button>
+      </div>
+      <div class="controls" style="margin:0">
+        <input type="text" id="raw" placeholder="raw hex, e.g. 01 63 2f 4d 65 61 73 2f 48 52" disabled>
+        <button id="sendRaw" disabled>Send</button>
+      </div>
+      <div style="font-size:.76rem;color:var(--muted);margin-top:6px">Preset = subscribe <code>[1, ref, path]</code>. Use raw hex to try exact bytes.</div>
+    </section>
+
+    <section class="card" style="grid-column:1 / -1">
+      <h2>Frame log <span class="stat" style="font-weight:400;color:var(--muted)" id="logsum"></span></h2>
+      <div class="mono" id="log">—</div>
+    </section>
+
+    <section class="card" style="grid-column:1 / -1">
+      <h2>Captured data <span class="stat" style="font-weight:400;color:var(--muted)" id="capsum"></span></h2>
+      <div class="mono" id="preview">—</div>
+      <div class="controls" style="margin-top:10px">
+        <button id="dlData" disabled>Download captured data</button>
+        <button id="dlLog" disabled>Download raw log (.txt)</button>
+        <span class="stat" id="parsed" style="color:var(--good)"></span>
+      </div>
+    </section>
+  </div>
+
+  <footer>
+    Nothing leaves your browser. Per its firmware, the sensor sends its stored recording as a JSON
+    stream; this tool concatenates the frame payloads and lets you save them, then
+    <a href="./import.html" style="color:var(--series2)">analyse the JSON</a>. If it doesn't complete,
+    the <b>raw log</b> shows the exact bytes — send it back (or an Android <code>Bluetooth HCI snoop
+    log</code> of the official app downloading) and the exact protocol can be implemented. Web
+    Bluetooth needs Chrome/Edge over https or <code>localhost</code>. Research tool — <b>not a medical device</b>.
+  </footer>
+
+  <script type="module" src="./download.mjs"></script>
+</body>
+</html>

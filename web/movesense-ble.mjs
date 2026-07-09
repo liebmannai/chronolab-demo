@@ -12,7 +12,22 @@ export const MS_WRITE   = '6e400002-b5a3-f393-e0a9-e50e24dcca9e'; // NUS RX (wri
 export const MS_NOTIFY  = '6e400003-b5a3-f393-e0a9-e50e24dcca9e'; // NUS TX (notify data)
 export const HR_PATH      = '/Meas/HR';              // Movesense HR resource (average + rrData ms)
 export const HB_PEAK_PATH = '/HeartBalance/PeakData';// custom HeartBalance recording peaks (rr, amplitude)
+export const HB_META_PATH = '/HeartBalance/MetaData';// battery/event/timestamp
+export const HB_ACC_PATH  = '/HeartBalance/AccData'; // accelerometer x/y/z
+export const HB_STATUS_PATH = '/HeartBalance/Status';// recording state / length
+export const INFO_PATH    = '/Info';                 // device info
 export const MS_REF_HR  = 99;
+
+// Web Bluetooth only exposes services declared up-front, so probe a candidate list to see what the
+// device actually has (this also reveals whether NUS is the exposed transport).
+export const PROBE_SERVICES = [
+  '6e400001-b5a3-f393-e0a9-e50e24dcca9e', // Nordic UART Service (Movesense Whiteboard transport)
+  '34802252-7185-4d5d-b431-630e7050e8f0', // legacy Movesense sensor-data service
+  '0000fe59-0000-1000-8000-00805f9b34fb', // Nordic DFU
+  '0000180a-0000-1000-8000-00805f9b34fb', // Device Information
+  '0000180f-0000-1000-8000-00805f9b34fb', // Battery
+  '0000180d-0000-1000-8000-00805f9b34fb', // Heart Rate
+];
 
 export function subscribeCmd(path, ref = MS_REF_HR) {
   return new Uint8Array([1, ref, ...new TextEncoder().encode(path)]);
