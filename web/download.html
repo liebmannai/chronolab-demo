@@ -39,7 +39,7 @@
        Service). <b>Experimental:</b> the exact command framing is being reverse-engineered — this
        tool enumerates the GATT, sends candidate commands, logs every raw frame, and downloads
        whatever the sensor returns. Chrome/Edge only.</p>
-    <p class="nav">↔ <a href="./import.html">analyse a recording</a> · <a href="./movesense.html">Movesense live</a> · <a href="./">HRV demo</a></p>
+    <p class="nav">↔ <a href="./hrv-app.html">analyse a recording</a> · <a href="./hrv-app.html#live">live HRV</a> · <a href="./">HRV demo</a></p>
   </header>
 
   <div class="controls">
@@ -93,7 +93,7 @@
   <footer>
     Nothing leaves your browser. Per its firmware, the sensor sends its stored recording as a JSON
     stream; this tool concatenates the frame payloads and lets you save them, then
-    <a href="./import.html" style="color:var(--series2)">analyse the JSON</a>. If it doesn't complete,
+    <a href="./hrv-app.html" style="color:var(--series2)">analyse the JSON</a>. If it doesn't complete,
     the <b>raw log</b> shows the exact bytes — send it back (or an Android <code>Bluetooth HCI snoop
     log</code> of the official app downloading) and the exact protocol can be implemented. Web
     Bluetooth needs Chrome/Edge over https or <code>localhost</code>. Research tool — <b>not a medical device</b>.

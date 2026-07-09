@@ -258,6 +258,7 @@ for (const id of ['reconstruct-a', 'reconstruct-l']) {
   });
 }
 if (!navigator.bluetooth) $('connect').title = 'Web Bluetooth needs Chrome/Edge over https or localhost';
+if (location.hash.replace('#', '').toLowerCase().startsWith('live')) selectTab('live'); // deep link from retired movesense.html
 
 loadWasm().then(() => setStatus('Ready — drop a recording, or open the <b>Live</b> tab to connect a sensor.'))
   .catch(e => setStatus('<span class="warn">Failed to load hrv_core.wasm:</span> ' + e.message));
