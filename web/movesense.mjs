@@ -85,9 +85,10 @@ window.addEventListener('resize', drawTachogram);
 async function connect() {
   if (!navigator.bluetooth) { setStatus('<span class="warn">Web Bluetooth unavailable</span> — use Chrome/Edge over https or localhost. You can still press <b>Simulate</b>.'); return; }
   try {
-    setStatus('Requesting Movesense HR2…');
+    setStatus('Pick your sensor from the list (Movesense / HeartBalance)…');
+    // custom HeartBalance firmware may advertise an unknown name/services -> accept all, filter after
     const dev = await navigator.bluetooth.requestDevice({
-      filters: [{ services: ['heart_rate'] }, { namePrefix: 'Movesense' }],
+      acceptAllDevices: true,
       optionalServices: ['heart_rate', MS_SERVICE],
     });
     dev.addEventListener('gattserverdisconnected', () => { setStatus('Disconnected.'); setRunning(false); });
@@ -99,10 +100,12 @@ async function connect() {
       await ch.startNotifications();
       ch.addEventListener('characteristicvaluechanged', ev => {
         const { hr, rr: rrs } = parseHeartRateMeasurement(ev.target.value);
-        if (rrs.length) for (const v of rrs) onBeat(v, hr); else hrInstant = hr;
+        if (rrs.length) for (const v of rrs) onBeat(v, hr); else { hrInstant = hr; updateHero(); }
       });
       mode = 'ble'; $('src').textContent = 'standard HR service'; setRunning(true);
-      setStatus(`Connected: <b>${dev.name || 'Movesense'}</b> via the standard Heart Rate service. Streaming…`);
+      setStatus(`Connected: <b>${dev.name || 'sensor'}</b> via the standard Heart Rate service. Streaming…`);
+      // if HR arrives but no RR (custom firmware may omit RR), nudge toward the Movesense API
+      setTimeout(() => { if (mode === 'ble' && rr.length === 0) setStatus(`Connected to <b>${dev.name || 'sensor'}</b>, but no RR intervals from the HR service yet. If none appear, click <b>Use Movesense API</b>.`); }, 8000);
     } catch {
       setStatus(`Connected: <b>${dev.name || 'Movesense'}</b>, but no standard HR service — trying the Movesense API…`);
       await connectMovesenseApi();
