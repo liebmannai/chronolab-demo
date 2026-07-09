@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HRV Studio — ChronoLab</title>
+<style>
+  .viz-root{
+    --page:#f9f9f7;--surface:#fcfcfb;--ink:#0b0b0b;--ink2:#52514e;--muted:#898781;
+    --border:rgba(11,11,11,0.10);--series:#e87ba4;--series2:#2a78d6;--baseline:rgba(11,11,11,0.18);
+    --good:#0ca30c;--critical:#d03b3b;--act:#d98324;--rec:#2a9d8f;color-scheme:light dark;
+  }
+  @media (prefers-color-scheme:dark){.viz-root{
+    --page:#0d0d0d;--surface:#1a1a19;--ink:#fff;--ink2:#c3c2b7;--muted:#898781;
+    --border:rgba(255,255,255,0.10);--series:#d55181;--series2:#3987e5;--baseline:rgba(255,255,255,0.20);
+  }}
+  *{box-sizing:border-box}html,body{margin:0}
+  body.viz-root{background:var(--page);color:var(--ink);font-family:system-ui,-apple-system,"Segoe UI",sans-serif;line-height:1.4;padding:clamp(16px,4vw,40px);max-width:960px;margin:0 auto}
+  header h1{font-size:1.4rem;font-weight:650;margin:0 0 2px}
+  header p{margin:0;color:var(--ink2);font-size:.9rem}
+  .nav{font-size:.82rem;margin:6px 0 0}.nav a{color:var(--series2);text-decoration:none;font-weight:550}
+
+  .tabs{display:flex;gap:6px;margin:18px 0 0;border-bottom:1px solid var(--border)}
+  .tabs button{font:inherit;font-weight:600;font-size:.92rem;color:var(--ink2);background:none;border:0;
+    border-bottom:2px solid transparent;padding:9px 14px;cursor:pointer;margin-bottom:-1px}
+  .tabs button[aria-selected=true]{color:var(--ink);border-bottom-color:var(--series)}
+
+  .panel{display:none;padding:16px 0 4px}.panel.active{display:block}
+  .controls{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+  button.btn{font:inherit;font-weight:550;color:var(--ink);background:var(--surface);border:1px solid var(--border);border-radius:9px;padding:8px 13px;cursor:pointer;font-size:.9rem}
+  button.btn.primary{background:var(--series);color:#fff;border-color:transparent}
+  button.btn:disabled{opacity:.45;cursor:not-allowed}
+  .toggle{display:inline-flex;align-items:center;gap:7px;font-size:.85rem;color:var(--ink2);margin-left:auto}
+  .status{color:var(--ink2);font-size:.85rem;min-height:1.2em;margin:12px 0 0}.status b{color:var(--ink)}.warn{color:var(--critical)}
+
+  #drop{border:1.5px dashed var(--border);border-radius:14px;padding:26px 18px;text-align:center;color:var(--ink2);cursor:pointer;transition:border-color .15s,background .15s}
+  #drop.over{border-color:var(--series);background:color-mix(in srgb,var(--series) 8%,transparent)}
+  #drop b{color:var(--ink)}#drop input{display:none}
+  .hint{font-size:.78rem;color:var(--muted)}
+
+  #results{display:none;margin-top:20px}
+  .hero{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 22px;padding:0 2px 14px}
+  .hero .big{font-size:2.6rem;font-weight:680;font-variant-numeric:tabular-nums;line-height:1}
+  .hero .unit{font-size:1rem;color:var(--muted);font-weight:550}
+  .hero .sub{font-size:.85rem;color:var(--ink2)}.hero .sub b{color:var(--ink);font-weight:600}
+  #metaline{font-size:.8rem;color:var(--muted);width:100%}
+
+  .tiles{display:grid;gap:10px;grid-template-columns:repeat(auto-fit,minmax(118px,1fr));margin-top:4px}
+  .tile{background:var(--surface);border:1px solid var(--border);border-radius:11px;padding:10px 12px}
+  .tile .v{font-size:1.25rem;font-weight:640;font-variant-numeric:tabular-nums}
+  .tile .k{font-size:.72rem;color:var(--muted);margin-top:1px}
+  .tile.wide{grid-column:span 2}
+  .chip{display:inline-block;font-size:.72rem;font-weight:600;padding:1px 8px;border-radius:20px;border:1px solid var(--border);color:var(--ink2)}
+  .chip.act{background:color-mix(in srgb,var(--act) 18%,transparent);color:var(--act);border-color:transparent}
+  .chip.rec{background:color-mix(in srgb,var(--rec) 18%,transparent);color:var(--rec);border-color:transparent}
+
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin-top:14px}
+  .card h2{font-size:.82rem;font-weight:650;margin:0 0 8px;color:var(--ink2)}
+  #tach{width:100%;height:150px;display:block}
+  footer{color:var(--muted);font-size:.78rem;margin-top:22px;max-width:78ch}
+  code{background:var(--surface);border:1px solid var(--border);border-radius:5px;padding:1px 5px}
+</style>
+</head>
+<body class="viz-root">
+  <header>
+    <h1>HRV Studio</h1>
+    <p>Analyse a HeartBalance/Movesense recording, or stream live HRV over Bluetooth — one engine,
+       the ChronoLab eval-core metrics.</p>
+    <p class="nav">↔ <a href="./download.html">download from Movesense</a> · <a href="./">HRV demo home</a></p>
+  </header>
+
+  <div class="tabs" role="tablist">
+    <button id="tab-analyze" role="tab" aria-selected="true">Analyse recording</button>
+    <button id="tab-live" role="tab" aria-selected="false">Live (Bluetooth)</button>
+  </div>
+
+  <!-- ANALYSE -->
+  <section class="panel active" id="panel-analyze" role="tabpanel">
+    <label id="drop" for="file">
+      <div><b>Drop a recording here</b> or click to choose</div>
+      <div class="hint">HeartBalance JSON (from the app or the native downloader), CSV (amplitude;rr), or a plain RR list</div>
+      <input type="file" id="file" accept=".json,.csv,.txt,application/json,text/csv,text/plain">
+    </label>
+    <div class="controls" style="margin-top:12px">
+      <label class="toggle"><input type="checkbox" id="reconstruct-a"> reconstruct missed beats <span id="recount-a" class="hint"></span></label>
+    </div>
+  </section>
+
+  <!-- LIVE -->
+  <section class="panel" id="panel-live" role="tabpanel">
+    <div class="controls">
+      <button id="connect" class="btn primary">Connect sensor</button>
+      <button id="simulate" class="btn">Simulate</button>
+      <button id="msapi" class="btn" disabled>Use Movesense API</button>
+      <button id="stop" class="btn" disabled>Stop</button>
+      <button id="reset" class="btn">Reset</button>
+      <label class="toggle"><input type="checkbox" id="reconstruct-l"> reconstruct missed beats <span id="recount-l" class="hint"></span></label>
+    </div>
+    <p class="hint" style="margin:10px 0 0">Works with a <b>Polar H10</b> (standard Heart-Rate service). A Movesense HR2 on
+      HeartBalance firmware won’t stream to a browser (closed Whiteboard protocol) — use the
+      <a href="./download.html">native downloader</a> for it, then analyse here.</p>
+  </section>
+
+  <div class="status" id="status">Loading engine…</div>
+
+  <!-- SHARED RESULTS -->
+  <div id="results">
+    <div class="hero">
+      <div><span class="big" id="hr">—</span> <span class="unit">bpm</span></div>
+      <div class="sub">beats <b id="beats">—</b></div>
+      <div class="sub">duration <b id="dur">—</b></div>
+      <div class="sub">source <b id="src">—</b></div>
+      <div id="metaline"></div>
+    </div>
+
+    <div class="tiles">
+      <div class="tile"><div class="v" id="hrsg">—</div><div class="k">HR (S-G) bpm</div></div>
+      <div class="tile"><div class="v" id="sdnn">—</div><div class="k">SDNN ms</div></div>
+      <div class="tile"><div class="v" id="rmssd">—</div><div class="k">RMSSD ms</div></div>
+      <div class="tile"><div class="v" id="pnn50">—</div><div class="k">pNN50 %</div></div>
+      <div class="tile"><div class="v" id="irrr">—</div><div class="k">IRRR ms</div></div>
+      <div class="tile"><div class="v" id="madrr">—</div><div class="k">MADRR ms</div></div>
+      <div class="tile"><div class="v" id="tinn">—</div><div class="k">TINN ms</div></div>
+      <div class="tile"><div class="v" id="hrvi">—</div><div class="k">HRV index</div></div>
+      <div class="tile"><div class="v" id="vq">—</div><div class="k">VQ · <span class="chip" id="vqchip"><span id="vqstate">—</span></span></div></div>
+      <div class="tile wide"><div class="v" id="lfhf">—</div><div class="k">LF/HF · <span id="lfhfsplit">—</span></div></div>
+      <div class="tile"><div class="v" id="vitpot">—</div><div class="k">Vitales Potenzial</div></div>
+      <div class="tile"><div class="v" id="vitidx">—</div><div class="k">Vitalitäts-Index</div></div>
+      <div class="tile"><div class="v" id="bkept">—</div><div class="k">beats kept</div></div>
+      <div class="tile"><div class="v" id="bpct">—</div><div class="k">valid %</div></div>
+      <div class="tile"><div class="v" id="blocks">—</div><div class="k">blocks</div></div>
+    </div>
+
+    <div class="card">
+      <h2>Tachogram (RR interval, ms)</h2>
+      <canvas id="tach"></canvas>
+    </div>
+
+    <div class="controls" style="margin-top:12px">
+      <button id="dlRr" class="btn" disabled>Download RR (.txt)</button>
+      <button id="dlCsv" class="btn" disabled>Download CSV</button>
+    </div>
+  </div>
+
+  <footer>
+    Everything runs in your browser — nothing is uploaded. Live Bluetooth needs Chrome/Edge over
+    https or <code>localhost</code>. Metrics use the ChronoLab eval-core core (S-Golay HR, SDNN,
+    RMSSD, geometric measures, IIR LF/HF → VQ). <b>Research tool — not a medical device.</b>
+  </footer>
+
+  <script type="module" src="./hrv-app.mjs"></script>
+</body>
+</html>
