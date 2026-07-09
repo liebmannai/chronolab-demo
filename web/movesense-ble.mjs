@@ -1,14 +1,17 @@
-// movesense-ble.mjs -- Movesense "Whiteboard over BLE" protocol (custom sensor-data service).
-// Used as a fallback/native path for the Movesense HR2; the standard Heart Rate service (0x2A37,
-// parsed by hrm.mjs) is the primary path. Refs: Movesense mobile lib / community BLE examples.
+// movesense-ble.mjs -- Movesense "Whiteboard over BLE" protocol. On this device (HeartBalance
+// custom firmware, verified from HeartBalance_FW_0.8/Movesense.bin) the Whiteboard runs over the
+// Nordic UART Service (NUS) — the firmware string `BleNordicUART`, the NUS base UUID in the binary,
+// and NO standard 0x2A37 HR characteristic. So RR comes via the Whiteboard resource /Meas/HR.
 //
-// Protocol: write [op, ref, ...utf8(path)] to the command characteristic; data arrives on the
-// notify characteristic as [respType, ref, ...payload]. op 1 = GET+SUBSCRIBE, 2 = UNSUBSCRIBE;
-// respType 2 = data. For /Meas/HR the payload is float32 `average` then uint16[] `rrData` (ms).
+// Protocol: write [op, ref, ...utf8(path)] to the NUS RX characteristic; data arrives on the NUS TX
+// characteristic as [respType, ref, ...payload]. op 1 = GET+SUBSCRIBE, 2 = UNSUBSCRIBE; respType 2 =
+// data. For /Meas/HR the payload is float32 `average` then uint16[] `rrData` (ms).
 
-export const MS_SERVICE = '34802252-7185-4d5d-b431-630e7050e8f0';
-export const MS_WRITE   = '34800001-7185-4d5d-b431-630e7050e8f0'; // commands (write)
-export const MS_NOTIFY  = '34800002-7185-4d5d-b431-630e7050e8f0'; // data (notify)
+export const MS_SERVICE = '6e400001-b5a3-f393-e0a9-e50e24dcca9e'; // Nordic UART Service
+export const MS_WRITE   = '6e400002-b5a3-f393-e0a9-e50e24dcca9e'; // NUS RX (write commands)
+export const MS_NOTIFY  = '6e400003-b5a3-f393-e0a9-e50e24dcca9e'; // NUS TX (notify data)
+export const HR_PATH      = '/Meas/HR';              // Movesense HR resource (average + rrData ms)
+export const HB_PEAK_PATH = '/HeartBalance/PeakData';// custom HeartBalance recording peaks (rr, amplitude)
 export const MS_REF_HR  = 99;
 
 export function subscribeCmd(path, ref = MS_REF_HR) {

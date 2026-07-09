@@ -41,16 +41,17 @@
 <body class="viz-root">
   <header>
     <h1>Live HRV<span class="chipname">Movesense HR2</span></h1>
-    <p>HRV from a <b>Movesense HR2</b>. RR intervals come from the standard Bluetooth Heart Rate
-       service (same as any HR strap); a native <b>Movesense Whiteboard API</b> path is available as a
-       fallback. Metrics use the eval-core pipeline in WASM. Chrome/Edge only.</p>
+    <p>HRV from a <b>Movesense HR2</b> (HeartBalance firmware). RR is read over the <b>Movesense
+       Whiteboard</b> — Nordic UART Service → <code>/Meas/HR</code> — auto-selected on connect (the
+       standard Heart Rate service is tried first for stock firmware). Metrics use the eval-core
+       pipeline in WASM. Chrome/Edge only.</p>
     <p class="nav">↔ <a href="./">old-engine HRV</a> · <a href="./eval.html">eval-core</a> · <a href="./record.html">extract ECG/RR</a> · <a href="./inspect.html">inspector</a></p>
   </header>
 
   <div class="controls">
     <button id="connect" class="primary">Connect Movesense HR2</button>
     <button id="simulate">Simulate</button>
-    <button id="msapi" disabled>Use Movesense API</button>
+    <button id="msapi" disabled>Use Movesense (NUS)</button>
     <button id="stop" disabled>Stop</button>
     <button id="reset">Reset</button>
     <label style="display:inline-flex;align-items:center;gap:6px;font-size:.85rem;color:var(--ink2);cursor:pointer"><input type="checkbox" id="reconstruct"> Reconstruct missed beats <span id="recount" style="color:var(--muted)"></span></label>
@@ -84,10 +85,11 @@
   </main>
 
   <footer>
-    The Movesense HR2 supports the standard Bluetooth Heart Rate service, so it works like any HR strap
-    (RR → HRV). If RR doesn't appear, click <b>Use Movesense API</b> to try the native Whiteboard path
-    (<code>/Meas/HR</code>, experimental — it logs raw frames for tuning). Web Bluetooth needs
-    Chrome/Edge over https or <code>localhost</code>. Research tool — <b>not a medical device</b>.
+    This sensor runs HeartBalance firmware on Movesense hardware; it exposes RR via the Movesense
+    Whiteboard over the Nordic UART Service (<code>/Meas/HR</code>), not a standard HR service — the
+    page selects that automatically and logs raw frames to the console for tuning. Wear the sensor
+    (electrodes moistened). Web Bluetooth needs Chrome/Edge over https or <code>localhost</code>.
+    Research tool — <b>not a medical device</b>.
   </footer>
 
   <script type="module" src="./movesense.mjs"></script>

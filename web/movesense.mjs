@@ -2,7 +2,7 @@
 // or the Movesense Whiteboard API (/Meas/HR, fallback). Reuses the eval-core wasm + reconstruction.
 import { parseHeartRateMeasurement } from './hrm.mjs';
 import { reconstructMissedBeats } from './reconstruct.mjs';
-import { MS_SERVICE, MS_WRITE, MS_NOTIFY, subscribeCmd, unsubscribeCmd, parseMovesenseHr } from './movesense-ble.mjs';
+import { MS_SERVICE, MS_WRITE, MS_NOTIFY, HR_PATH, subscribeCmd, unsubscribeCmd, parseMovesenseHr } from './movesense-ble.mjs';
 
 const KEYS = ["beats_in","beats_kept","kept_pct","duration_h","blocks","HR_sgolay","SDNN_pop","RMSSD",
   "pNN50_pct","IRRR","MADRR","TINN","HRVi","LF_ms2","HF_ms2","TOT_ms2","VQ","VitalesPotential","VitalitaetsIndex"];
@@ -107,25 +107,29 @@ async function connect() {
       // if HR arrives but no RR (custom firmware may omit RR), nudge toward the Movesense API
       setTimeout(() => { if (mode === 'ble' && rr.length === 0) setStatus(`Connected to <b>${dev.name || 'sensor'}</b>, but no RR intervals from the HR service yet. If none appear, click <b>Use Movesense API</b>.`); }, 8000);
     } catch {
-      setStatus(`Connected: <b>${dev.name || 'Movesense'}</b>, but no standard HR service — trying the Movesense API…`);
+      setStatus(`Connected: <b>${dev.name || 'Movesense'}</b> — no standard HR service (expected), using the Movesense Whiteboard over NUS…`);
       await connectMovesenseApi();
     }
   } catch (err) { setStatus('<span class="warn">Connect failed:</span> ' + err.message); }
 }
 
 // ---- Movesense Whiteboard API (fallback / native): subscribe /Meas/HR ----
+async function nusWrite(rx, bytes) {                    // NUS RX is usually write-without-response
+  try { await rx.writeValueWithoutResponse(bytes); } catch { await rx.writeValueWithResponse(bytes); }
+}
 async function connectMovesenseApi() {
   if (!msServer) { setStatus('Connect first.'); return; }
   try {
-    const svc = await msServer.getPrimaryService(MS_SERVICE);
+    const svc = await msServer.getPrimaryService(MS_SERVICE);   // Nordic UART Service
     const wr = await svc.getCharacteristic(MS_WRITE);
     msNotify = await svc.getCharacteristic(MS_NOTIFY);
     await msNotify.startNotifications();
     msNotify.addEventListener('characteristicvaluechanged', onMovesenseData);
-    await wr.writeValueWithResponse(subscribeCmd('/Meas/HR'));
-    mode = 'msapi'; $('src').textContent = 'Movesense API'; setRunning(true);
-    setStatus('Subscribed to Movesense <code>/Meas/HR</code> (experimental). Waiting for data…');
-  } catch (e) { setStatus('<span class="warn">Movesense API failed:</span> ' + e.message + ' — the standard HR service is the reliable path.'); }
+    await nusWrite(wr, subscribeCmd(HR_PATH));                   // subscribe /Meas/HR (rrData)
+    mode = 'msapi'; $('src').textContent = 'Movesense (NUS)'; setRunning(true);
+    setStatus('Subscribed to Movesense <code>/Meas/HR</code> over NUS. Waiting for RR data…');
+    setTimeout(() => { if (mode === 'msapi' && rr.length === 0 && msLogged === 0) setStatus('No Movesense data yet — make sure the sensor is worn (touch both electrodes). Raw frames will appear here when data flows.'); }, 8000);
+  } catch (e) { setStatus('<span class="warn">Movesense NUS failed:</span> ' + e.message); }
 }
 function onMovesenseData(e) {
   const dv = e.target.value;
