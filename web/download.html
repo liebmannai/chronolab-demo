@@ -35,10 +35,13 @@
 <body class="viz-root">
   <header>
     <h1>Download recording — Movesense / HeartBalance</h1>
-    <p>Connect the sensor and pull its on-device data over BLE (Movesense Whiteboard over Nordic UART
-       Service). <b>Experimental:</b> the exact command framing is being reverse-engineered — this
-       tool enumerates the GATT, sends candidate commands, logs every raw frame, and downloads
-       whatever the sensor returns. Chrome/Edge only.</p>
+    <p><b class="warn">A browser cannot download from a HeartBalance-firmware sensor — this is not a bug.</b>
+       That firmware's data service (<code>FDF3</code>) speaks the closed Movesense <b>Whiteboard</b>
+       protocol: a versioned handshake + framing that only Movesense's <code>libmds</code> binary performs,
+       so the sensor ignores every command a browser can send. Confirmed from the firmware, the Movesense
+       SDKs, and HeartBalance's own apps. <b>To get your recording:</b> use the native iOS downloader (or the
+       official app that exported it), then analyse it in <a href="./hrv-app.html">HRV Studio</a>. This page
+       remains only as a raw-frame <i>probe</i> — useful for capturing bytes for reverse-engineering. Chrome/Edge only.</p>
     <p class="nav">↔ <a href="./hrv-app.html">analyse a recording</a> · <a href="./hrv-app.html#live">live HRV</a> · <a href="./">HRV demo</a></p>
   </header>
 
@@ -46,7 +49,7 @@
     <button id="connect" class="primary">Connect sensor</button>
     <button id="clear" disabled>Clear capture</button>
   </div>
-  <div class="status" id="status">Idle. Connect and pick your sensor.</div>
+  <div class="status" id="status">Idle. Note: with HeartBalance firmware the sensor will not respond to any browser command (see above) — this is a diagnostic probe, not a working downloader.</div>
 
   <div class="grid">
     <section class="card">
