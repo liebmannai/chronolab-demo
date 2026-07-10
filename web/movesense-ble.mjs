@@ -44,6 +44,40 @@ export function fetchLogCmd(logId, ref = MS_REF_HR) {
   return b;
 }
 
+// ── Movesense Whiteboard protocol_v9 HELLO handshake ─────────────────────────────────
+// Reverse-engineered from MdsLib (mikkojeronen/MovesenseMds-iOS → MdsLib.xcframework, unstripped):
+//   whiteboard::WhiteboardCommunication::sendHandshake / handleHelloMessage.
+// The FDF3 service speaks the full Whiteboard protocol; the sensor answers NOTHING until it
+// receives a HELLO that establishes a route ("Connection timeout ... waiting hello").
+//
+// On-wire whiteboard message = [6-byte DataMessageHeader][32-byte HELLO payload], written to 6b200001.
+//   VALIDATED from the binary:
+//     • message type HELLO = 0x12 (ack 0x13); header byte[1] = (flag<<7)|(type&0x7f)  → 0x12
+//     • base header length = 6 (getHeaderLength(false)=6; +0x19 with routing)
+//     • payload[0]=0x09, payload[1]=0x09  (commVersion / minCommVersion = 9; parser does cmp $0x9)
+//   BEST-GUESS (not yet verified against hardware — iterate if the sensor stays silent):
+//     • header[0], and the two header uint16s at [2..3]/[4..5] (length + MessageType)
+//     • payload[2]=routeId(0), [3..14]=12-byte SuuntoSerial, [15..22]=WhiteboardVersion(0),
+//       [23]=capability flags(0), [24..31]=0
+export const WB_MSG = { HELLO: 0x12, HELLO_ACK: 0x13 };
+export function helloWbCmd(serial = '000000000001', opt = {}) {
+  const payload = new Uint8Array(32);
+  payload[0] = 0x09; payload[1] = 0x09;                 // commVersion / minCommVersion  (VALIDATED)
+  payload[2] = opt.routeId ?? 0;
+  const s = enc.encode(String(serial).replace(/\D/g, '').padEnd(12, '0').slice(0, 12));
+  payload.set(s.slice(0, 12), 3);                       // [3..14] 12-byte serial
+  // [15..22] WhiteboardVersion, [23] flags, [24..31] left 0
+  const header = new Uint8Array(6);
+  const dv = new DataView(header.buffer);
+  header[0] = opt.h0 ?? 0x00;
+  header[1] = WB_MSG.HELLO;                             // type|flag  (VALIDATED: 0x12)
+  dv.setUint16(2, opt.lenField ?? payload.length, true); // guess: payload length (LE)
+  dv.setUint16(4, opt.typeField ?? WB_MSG.HELLO, true);  // guess: MessageType (LE)
+  const msg = new Uint8Array(header.length + payload.length);
+  msg.set(header, 0); msg.set(payload, 6);
+  return msg;
+}
+
 // Parse a GSP DATA notification (opcode 0x02) for the HR resource (/Meas/HR). SBEM: float32 average
 // then a uint8-length-prefixed uint16[] rrData (ms). -> { respType, ref, average, rr:[ms,...] }.
 export function parseMovesenseHr(dv) {

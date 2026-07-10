@@ -49,7 +49,7 @@
     <button id="connect" class="primary">Connect sensor</button>
     <button id="clear" disabled>Clear capture</button>
   </div>
-  <div class="status" id="status">Idle. Note: with HeartBalance firmware the sensor will not respond to any browser command (see above) — this is a diagnostic probe, not a working downloader.</div>
+  <div class="status" id="status">Idle. <b>Experiment:</b> a reverse-engineered Whiteboard <b>HELLO handshake</b> is now here — connect, press <b>Send Whiteboard HELLO (RE)</b>, and watch the frame log for <i>any</i> reply on the notify characteristic. A reply = the handshake worked.</div>
 
   <div class="grid">
     <section class="card">
@@ -68,6 +68,11 @@
         <button id="fetchlog" disabled>FETCH_LOG</button>
         <button id="unsub" disabled>Unsub</button>
         <button id="probe" class="primary" disabled>Auto-probe</button>
+      </div>
+      <div class="controls" style="margin:8px 0 4px;padding-top:8px;border-top:1px solid var(--border)">
+        <button id="wbhello" class="primary" disabled>Send Whiteboard HELLO (RE)</button>
+        <input type="text" id="wbserial" value="000000000001" style="min-width:120px" placeholder="client serial" disabled>
+        <span style="font-size:.76rem;color:var(--muted)">← reverse-engineered protocol_v9 handshake — watch for any reply on notify</span>
       </div>
       <div class="controls" style="margin:0 0 4px"><input type="text" id="logid" value="0" style="min-width:90px" placeholder="log id" disabled> <span style="font-size:.76rem;color:var(--muted)">← FETCH_LOG id (uint32)</span></div>
       <div class="controls" style="margin:0">
