@@ -91,6 +91,8 @@
     <div class="controls">
       <button id="connect" class="btn primary">Connect sensor</button>
       <button id="simulate" class="btn">Simulate</button>
+      <button id="wsview" class="btn">Receive (WebSocket)</button>
+      <button id="wsshare" class="btn" disabled>Share to bridge</button>
       <button id="msapi" class="btn" disabled>Use Movesense API</button>
       <button id="stop" class="btn" disabled>Stop</button>
       <button id="reset" class="btn">Reset</button>
@@ -99,6 +101,9 @@
     <p class="hint" style="margin:10px 0 0">Works with a <b>Polar H10</b> (standard Heart-Rate service). A Movesense HR2 on
       HeartBalance firmware won’t stream to a browser (closed Whiteboard protocol) — use the
       <a href="./download.html">native downloader</a> for it, then analyse here.</p>
+    <p class="hint" style="margin:6px 0 0">No Web Bluetooth (e.g. iPhone/Safari)? Stream from a desktop/Android Chrome via
+      <b>Share to bridge</b>, then open this page with <code>?ws=wss://your-bridge</code> and press <b>Receive</b>. (Run
+      <code>web/bridge.mjs</code> behind a wss tunnel — see web/README.)</p>
   </section>
 
   <div class="status" id="status">Loading engine…</div>

@@ -3,99 +3,14 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Live HRV — eval-core variant (modern R processing)</title>
-<style>
-  .viz-root{
-    --page:#f9f9f7;--surface:#fcfcfb;--ink:#0b0b0b;--ink2:#52514e;--muted:#898781;
-    --grid:#e1e0d9;--baseline:#c3c2b7;--border:rgba(11,11,11,0.10);
-    --series:#1baf7a;--series2:#2a78d6;--good:#0ca30c;color-scheme:light dark;   /* aqua accent to distinguish from the old page */
-  }
-  @media (prefers-color-scheme:dark){.viz-root{
-    --page:#0d0d0d;--surface:#1a1a19;--ink:#fff;--ink2:#c3c2b7;--muted:#898781;
-    --grid:#2c2c2a;--baseline:#383835;--border:rgba(255,255,255,0.10);--series:#199e70;--series2:#3987e5;
-  }}
-  *{box-sizing:border-box}html,body{margin:0}
-  body.viz-root{background:var(--page);color:var(--ink);font-family:system-ui,-apple-system,"Segoe UI",sans-serif;line-height:1.4;padding:clamp(16px,4vw,40px)}
-  header h1{font-size:1.35rem;font-weight:650;margin:0 0 2px}
-  header p{margin:0;color:var(--ink2);font-size:.9rem}
-  .nav{font-size:.82rem;margin:6px 0 0}.nav a{color:var(--series2);text-decoration:none;font-weight:550}
-  .chipname{display:inline-block;font-size:.72rem;font-weight:650;color:#fff;background:var(--series);border-radius:999px;padding:2px 9px;margin-left:6px;vertical-align:middle}
-  .controls{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:18px 0 6px}
-  button{font:inherit;font-weight:550;color:var(--ink);background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:9px 15px;cursor:pointer}
-  button.primary{background:var(--series);color:#fff;border-color:transparent}
-  button:disabled{opacity:.45;cursor:not-allowed}
-  .status{color:var(--ink2);font-size:.85rem;min-height:1.2em;margin:2px 0 18px}.status b{color:var(--ink)}
-  main{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(215px,1fr))}
-  .card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px 18px}
-  .card .k{color:var(--ink2);font-size:.8rem}
-  .hero{grid-column:1 / -1;display:flex;align-items:baseline;flex-wrap:wrap;gap:6px 26px}
-  .hero .big{font-size:clamp(44px,9vw,68px);font-weight:680;font-variant-numeric:tabular-nums;letter-spacing:-.01em}
-  .hero .unit{color:var(--muted);font-size:1rem;font-weight:550;margin-left:-14px}
-  .hero .sub{color:var(--ink2);font-size:.9rem;font-variant-numeric:tabular-nums}.hero .sub b{color:var(--ink)}
-  .tach{grid-column:1 / -1}.tach .head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:6px}
-  .tach canvas{width:100%;height:140px;display:block}
-  .chip{display:inline-flex;align-items:center;gap:7px;font-size:.82rem;font-weight:600;border:1px solid var(--border);border-radius:999px;padding:4px 11px;color:var(--ink)}
-  .chip .dot{width:9px;height:9px;border-radius:50%;background:var(--muted)}.chip.act .dot{background:var(--series2)}.chip.rec .dot{background:var(--series)}
-  .tiles .v{font-size:1.75rem;margin-top:2px;font-variant-numeric:tabular-nums;font-weight:650}
-  .tiles .u{color:var(--muted);font-size:.82rem;font-weight:550;margin-left:5px}
-  .tiles .note{color:var(--muted);font-size:.74rem;margin-top:3px}
-  footer{color:var(--muted);font-size:.78rem;margin-top:22px;max-width:74ch}
-  code{background:var(--surface);border:1px solid var(--border);border-radius:5px;padding:1px 5px}.warn{color:#d03b3b}
-</style>
+<title>Moved → HRV Studio</title>
+<meta http-equiv="refresh" content="0; url=./hrv-app.html#live">
+<link rel="canonical" href="./hrv-app.html">
+<style>body{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;margin:0;min-height:100vh;display:grid;place-items:center;padding:24px;text-align:center;background:#f9f9f7;color:#0b0b0b}@media(prefers-color-scheme:dark){body{background:#0d0d0d;color:#fff}}a{color:#2a78d6;font-weight:600}</style>
 </head>
-<body class="viz-root">
-  <header>
-    <h1>Live HRV<span class="chipname">eval-core variant</span></h1>
-    <p>The <b>modern R</b> data-processing pipeline (DrPeterHauschild/eval-core): RHRV <code>FilterNIHR</code>
-       beat filtering, time-based blocks, population SDNN, symmetric pNN50, IRRR/MADRR/TINN/HRVi,
-       Savitzky-Golay heart rate, Welch-PSD frequency — computed live by <code>hrv_eval_run</code> in WASM.</p>
-    <p class="nav">↔ compare with the <a href="./">old engine (IIR/zero-crossing) page</a></p>
-  </header>
-
-  <div class="controls">
-    <button id="connect" class="primary">Connect sensor</button>
-    <button id="simulate">Simulate</button>
-    <button id="wsview">Receive (WebSocket)</button>
-    <button id="wsshare" disabled>Share to bridge</button>
-    <button id="stop" disabled>Stop</button>
-    <button id="reset">Reset</button>
-    <label style="display:inline-flex;align-items:center;gap:6px;font-size:.85rem;color:var(--ink2);cursor:pointer"><input type="checkbox" id="reconstruct"> Reconstruct missed beats <span id="recount" style="color:var(--muted)"></span></label>
-  </div>
-  <div class="status" id="status">Idle. Connect a Bluetooth HR strap, or press <b>Simulate</b>.</div>
-
-  <main>
-    <section class="card hero">
-      <div><span class="big" id="hr">—</span><span class="unit"> bpm</span></div>
-      <div class="sub">in <b id="bin">0</b> · kept <b id="bkept">0</b> (<b id="bpct">—</b>) · <b id="dur">0:00</b> · blocks <b id="blocks">0</b></div>
-    </section>
-
-    <section class="card tach">
-      <div class="head"><div class="k">RR tachogram — last 150 beats (ms)</div>
-        <span class="chip" id="vqchip"><span class="dot"></span><span id="vqstate">—</span></span></div>
-      <canvas id="tach"></canvas>
-    </section>
-
-    <section class="card tiles"><div class="k">HR (Savitzky-Golay)</div><div class="v"><span id="hrsg">—</span><span class="u">bpm</span></div><div class="note">SG-smoothed, order 2</div></section>
-    <section class="card tiles"><div class="k">SDNN (population)</div><div class="v"><span id="sdnn">—</span><span class="u">ms</span></div><div class="note">√(Σ(x−x̄)²/N)</div></section>
-    <section class="card tiles"><div class="k">RMSSD</div><div class="v"><span id="rmssd">—</span><span class="u">ms</span></div><div class="note">√mean(ΔRR²)</div></section>
-    <section class="card tiles"><div class="k">pNN50</div><div class="v"><span id="pnn50">—</span><span class="u">%</span></div><div class="note">|ΔRR| &gt; 50 ms (symmetric)</div></section>
-    <section class="card tiles"><div class="k">IRRR</div><div class="v"><span id="irrr">—</span><span class="u">ms</span></div><div class="note">IQR of ΔRR</div></section>
-    <section class="card tiles"><div class="k">MADRR</div><div class="v"><span id="madrr">—</span><span class="u">ms</span></div><div class="note">median |ΔRR|</div></section>
-    <section class="card tiles"><div class="k">TINN</div><div class="v"><span id="tinn">—</span><span class="u">ms</span></div><div class="note">triangular interpolation</div></section>
-    <section class="card tiles"><div class="k">HRV index</div><div class="v"><span id="hrvi">—</span></div><div class="note">N / modal bin (7.8125 ms)</div></section>
-    <section class="card tiles"><div class="k">Vegetativer Quotient (VQ)</div><div class="v"><span id="vq">—</span></div><div class="note">ln(LF/HF), Welch PSD</div></section>
-    <section class="card tiles"><div class="k">LF / HF power</div><div class="v"><span id="lfhf">—</span><span class="u">ms²</span></div><div class="note"><span id="lfhfsplit">—</span></div></section>
-    <section class="card tiles"><div class="k">Vitales Potential</div><div class="v"><span id="vitpot">—</span><span class="u">ms²</span></div><div class="note">exp(mean ln TOT)</div></section>
-    <section class="card tiles"><div class="k">VitalitätsIndex</div><div class="v"><span id="vitidx">—</span></div><div class="note">ln(TOT)·SDNN·log₁₀(MADRR)</div></section>
-  </main>
-
-  <footer>
-    Same sensor input as the old-engine page, different maths: beats are filtered with an RHRV-style
-    <code>FilterNIHR</code> (25–180 bpm gate + adaptive), grouped into fixed 5-min blocks (no validity
-    gate), and summarised with the eval-core metric set. Numbers therefore differ from the old page by
-    design. Web Bluetooth needs Chrome/Edge over https or <code>localhost</code>. Research tool — not a medical device.
-  </footer>
-
-  <script type="module" src="./eval.mjs"></script>
+<body>
+  <p>The eval-core live variant (incl. the WebSocket bridge) is now the <b>Live</b> tab of
+     <a href="./hrv-app.html#live">HRV Studio</a> — redirecting…</p>
+  <script>location.replace('./hrv-app.html#live');</script>
 </body>
 </html>

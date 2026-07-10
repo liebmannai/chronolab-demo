@@ -18,7 +18,7 @@ let reconstructOn = false;
 
 // per-tab state
 const A = { rr: [], parsed: null };
-const L = { rr: [], hrInstant: null, mode: null, srcLabel: '—', sim: null, server: null, notify: null, logged: 0, dirty: false };
+const L = { rr: [], hrInstant: null, mode: null, srcLabel: '—', sim: null, server: null, notify: null, logged: 0, dirty: false, viewSock: null, shareSock: null };
 
 // ---- wasm (eval-core) --------------------------------------------------------------
 const CAP = 300000;
@@ -133,6 +133,7 @@ async function handleFile(file) {
 // ---- LIVE tab ----------------------------------------------------------------------
 function onBeat(rrMs, hr) {
   L.rr.push(rrMs); L.hrInstant = hr ?? Math.round(60000 / rrMs); L.dirty = true;
+  if (L.shareSock && L.shareSock.readyState === 1) L.shareSock.send(JSON.stringify({ t: 'rr', rr: [rrMs], hr: L.hrInstant }));
   if (tab === 'live') { // cheap immediate feedback; full metrics recompute on the 1 s tick
     $('hr').textContent = L.hrInstant; $('beats').textContent = L.rr.length;
     $('dur').textContent = fmtDur(L.rr.reduce((a, b) => a + b, 0) / 1000);
@@ -201,13 +202,47 @@ function startSim() {
   };
   tick();
 }
-function stop() { if (L.sim) { clearTimeout(L.sim); L.sim = null; } setRunning(false); }
+function stop() {
+  if (L.sim) { clearTimeout(L.sim); L.sim = null; }
+  if (L.viewSock) { try { L.viewSock.close(); } catch {} L.viewSock = null; }
+  setRunning(false);
+}
 function resetLive() {
-  stop(); L.rr.length = 0; L.hrInstant = null; L.mode = null; L.srcLabel = '—';
+  stop();
+  if (L.shareSock) { try { L.shareSock.close(); } catch {} L.shareSock = null; $('wsshare').textContent = 'Share to bridge'; }
+  L.rr.length = 0; L.hrInstant = null; L.mode = null; L.srcLabel = '—';
   if (tab === 'live') { $('results').style.display = 'none'; }
   setStatus('Reset.');
 }
-function setRunning(on) { $('stop').disabled = !on; }
+function setRunning(on) { $('stop').disabled = !on; $('wsshare').disabled = !(on && (L.mode === 'ble' || L.mode === 'sim' || L.mode === 'msapi')); }
+
+// ---- WebSocket bridge (ported from the retired eval.html): relay RR when Web Bluetooth isn't available ----
+function wsUrl() { const q = new URLSearchParams(location.search).get('ws'); return q || ((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host); }
+function connectView() {
+  stop(); if (tab !== 'live') selectTab('live');
+  const override = new URLSearchParams(location.search).get('ws'); let url = override || wsUrl();
+  if (!override && location.protocol === 'https:') {
+    const entered = prompt('WebSocket bridge URL (wss://host) — run web/bridge.mjs behind a wss tunnel:', 'wss://');
+    if (!entered || !/^wss?:\/\/.+/.test(entered)) { setStatus('Need a <code>wss://</code> bridge URL (see web/README).'); return; }
+    url = entered;
+  }
+  setStatus(`Connecting to bridge <b>${url}</b>…`);
+  try { L.viewSock = new WebSocket(url); } catch (e) { setStatus('<span class="warn">Bad WebSocket URL:</span> ' + e.message); return; }
+  L.mode = 'ws'; L.srcLabel = 'WebSocket bridge';
+  L.viewSock.onopen = () => { setRunning(true); setStatus(`Receiving RR over WebSocket (<b>${url}</b>).`); };
+  L.viewSock.onmessage = e => { try { const m = JSON.parse(e.data); if (m.t === 'rr' && Array.isArray(m.rr)) for (const v of m.rr) onBeat(v, m.hr); } catch {} };
+  L.viewSock.onclose = () => { if (L.mode === 'ws') setStatus('WebSocket closed.'); setRunning(false); };
+  L.viewSock.onerror = () => setStatus(location.protocol === 'https:'
+    ? '<span class="warn">WebSocket error</span> — point <code>?ws=wss://your-bridge</code> at a hosted bridge, or use Simulate.'
+    : '<span class="warn">WebSocket error</span> — is the bridge running? <code>node web/bridge.mjs --simulate</code>');
+}
+function toggleShare() {
+  if (L.shareSock) { try { L.shareSock.close(); } catch {} L.shareSock = null; $('wsshare').textContent = 'Share to bridge'; setStatus('Stopped sharing.'); return; }
+  const url = wsUrl(); L.shareSock = new WebSocket(url);
+  L.shareSock.onopen = () => { $('wsshare').textContent = 'Stop sharing'; setStatus(`Sharing RR to the bridge (<b>${url}</b>).`); };
+  L.shareSock.onclose = () => { L.shareSock = null; $('wsshare').textContent = 'Share to bridge'; };
+  L.shareSock.onerror = () => setStatus('<span class="warn">Share failed</span> — start the bridge: <code>node web/bridge.mjs</code>');
+}
 
 // ---- downloads (active tab's raw RR) -----------------------------------------------
 function download(name, text, mime = 'text/plain') {
@@ -246,6 +281,8 @@ $('simulate').addEventListener('click', startSim);
 $('msapi').addEventListener('click', connectMovesenseApi);
 $('stop').addEventListener('click', stop);
 $('reset').addEventListener('click', resetLive);
+$('wsview').addEventListener('click', connectView);
+$('wsshare').addEventListener('click', toggleShare);
 
 // reconstruct toggle (two checkboxes, one setting)
 reconstructOn = localStorage.getItem('hrvReconstruct') === '1';
