@@ -70,9 +70,12 @@ export function helloWbCmd(serial = '000000000001', opt = {}) {
   const header = new Uint8Array(6);
   const dv = new DataView(header.buffer);
   header[0] = opt.h0 ?? 0x00;
-  header[1] = WB_MSG.HELLO;                             // type|flag  (VALIDATED: 0x12)
+  // header[1] low-7 = message CLASS (getMessageClass() returns header[1]&0x7f). The class is
+  // MessageTypeToClassMap[type], but that map is __DATA,__common (runtime-initialized) so its
+  // value isn't in the binary — hence the sweep. Default to the raw type as a first candidate.
+  header[1] = (opt.h1 ?? WB_MSG.HELLO) & 0x7f;
   dv.setUint16(2, opt.lenField ?? payload.length, true); // guess: payload length (LE)
-  dv.setUint16(4, opt.typeField ?? WB_MSG.HELLO, true);  // guess: MessageType (LE)
+  dv.setUint16(4, opt.typeField ?? WB_MSG.HELLO, true);  // MessageType (LE) — full type 0x12
   const msg = new Uint8Array(header.length + payload.length);
   msg.set(header, 0); msg.set(payload, 6);
   return msg;
