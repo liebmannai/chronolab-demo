@@ -98,12 +98,12 @@
       <button id="reset" class="btn">Reset</button>
       <label class="toggle"><input type="checkbox" id="reconstruct-l"> reconstruct missed beats <span id="recount-l" class="hint"></span></label>
     </div>
-    <p class="hint" style="margin:10px 0 0">Works with a <b>Polar H10</b> (standard Heart-Rate service). A Movesense HR2 on
-      HeartBalance firmware won’t stream to a browser (closed Whiteboard protocol) — use the
-      <a href="./download.html">native downloader</a> for it, then analyse here.</p>
-    <p class="hint" style="margin:6px 0 0">No Web Bluetooth (e.g. iPhone/Safari)? Stream from a desktop/Android Chrome via
-      <b>Share to bridge</b>, then open this page with <code>?ws=wss://your-bridge</code> and press <b>Receive</b>. (Run
-      <code>web/bridge.mjs</code> behind a wss tunnel — see web/README.)</p>
+    <p class="hint" style="margin:10px 0 0"><b>Polar H10</b> streams directly — press <b>Connect</b>.</p>
+    <p class="hint" style="margin:6px 0 0"><b>Live Movesense</b> (a browser can't stream it directly — closed Whiteboard protocol):
+      run the native <a href="./download.html">MovesenseDownloader</a> app — it streams RR via MDS and <b>forwards to a wss
+      bridge</b> — then press <b>Receive (WebSocket)</b> here, or open this page with <code>?ws=wss://your-bridge</code>. The RR
+      appears live. Same path serves an iPhone/Safari (no Web Bluetooth). Bridge = <code>web/bridge.mjs</code> behind a wss tunnel
+      (see web/README).</p>
   </section>
 
   <div class="status" id="status">Loading engine…</div>
